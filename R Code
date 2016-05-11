@@ -1,0 +1,78 @@
+library(twitteR)
+library(httr)
+library(ROAuth)
+library(plyr)
+library(stringr)
+
+#Access Twitter dev apps for this
+
+api_key <- "YOUR API KEY"
+
+api_secret <- "YOUR API SECRET"
+
+access_token <- "YOUR ACCESS TOKEN"
+
+access_token_secret <- "YOUR ACCESS TOKEN SECRET"
+
+setup_twitter_oauth(api_key,api_secret,access_token,access_token_secret)
+
+#I just wanted 100 Tweets as a sample
+tweets = searchTwitter("ObamaCare", n = 100)
+
+#Changes tweets into text
+tweets.txt = laply(tweets, function(t)t$getText())
+
+#I wrote tweets to a separate text file for an assignment
+write(tweets.txt, "tweetsObama.txt", sep = "\t")
+
+#I'm loading the positive and negative lexicons
+pos.words = scan('poswords.txt', what = 'character', comment.char = ';')
+neg.words = scan('negwords.txt', what = 'character', comment.char = ';')
+
+score.sentiment = function(sentences, pos.words, neg.words, .progress='none')
+{
+  require(plyr)
+  require(stringr)
+  
+  # we got a vector of sentences. plyr will handle a list or a vector as an "l" for us
+  # we want a simple array of scores back, so we use "l" + "a" + "ply" = laply:
+  scores = laply(sentences, function(sentence, pos.words, neg.words) {
+    
+    # clean up sentences with R's regex-driven global substitute, gsub():
+    sentence = gsub('[[:punct:]]', '', sentence)
+    sentence = gsub('[[:cntrl:]]', '', sentence)
+    sentence = gsub('\\d+', '', sentence)
+    # and convert to lower case:
+    sentence = tolower(sentence)
+    
+    # split into words. str_split is in the stringr package
+    word.list = str_split(sentence, '\\s+')
+    # sometimes a list() is one level of hierarchy too much
+    words = unlist(word.list)
+    
+    # compare our words to the dictionaries of positive & negative terms
+    
+    neg.matches = match(words, neg.words)
+    pos.matches = match(words, pos.words)
+    
+    # match() returns the position of the matched term or NA
+    # we just want a TRUE/FALSE:
+    pos.matches = !is.na(pos.matches)
+    neg.matches = !is.na(neg.matches)
+    
+    # and conveniently enough, TRUE/FALSE will be treated as 1/0 by sum():
+    score = sum(pos.matches) - sum(neg.matches)
+    
+    return(score)
+  }, pos.words, neg.words, .progress=.progress )
+  
+  scores.df = data.frame(score=scores, text=sentences)
+  return(scores.df)
+}
+score.sentiment(tweets.txt, pos.words, neg.words, .progress = 'text')
+
+tweetsentiment.txt = score.sentiment(tweets.txt, pos.words, neg.words, .progress = 'text')
+
+write.table(tweetsentiment.txt, "problem2.txt", sep = "\t")
+
+class(tweetsentiment.txt)
